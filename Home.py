@@ -39,7 +39,7 @@ if LOGGED_IN == True:
     st.write('<style>div.block-container{padding-top:0rem;}</style>', unsafe_allow_html=True)
     
     DB_path= "Data\Excels\Database.xlsx"
-    @st.cache_data
+    @st.cache
     def load_DB(DB_path):
         Sheets= pd.read_excel(DB_path, sheet_name=["FMSI", "Kits", "Shim_crossing", "Kit_crossing", "SHIMS"])
         FMSI= Sheets['FMSI']
