@@ -59,7 +59,7 @@ if LOGGED_IN == True:
     
     
     with st.sidebar:
-        st.image(r"Data\logo.jpeg")
+        st.image(r"Data/logo.jpeg")
         menu = option_menu(menu_title="Navigation",options=
                            ["SHIMS",
                             "KITS",
@@ -83,7 +83,7 @@ if LOGGED_IN == True:
 
         # Display the right things according to the page
         if page == 'Request For Quotation':
-            SHIMS_RFQ_Template= pd.read_excel(r'Data\Excels\SHIMS_RFQ_template.xlsx')
+            SHIMS_RFQ_Template= pd.read_excel(r'Data/Excels/SHIMS_RFQ_template.xlsx')
             SHIMS_RFQ= st.download_button(label='📥 Download SHIMS RFQ template',
                                 data=to_excel(SHIMS_RFQ_Template),
                                 file_name= 'SHIMS_RFQ_Template.xlsx')
@@ -322,7 +322,7 @@ if LOGGED_IN == True:
         #format_func=lambda name: name.capitalize(),
         )
         if page == 'Request For Quotation':
-            KITS_RFQ_Template= pd.read_excel(r'Data\Excels\KITS_RFQ_template.xlsx')
+            KITS_RFQ_Template= pd.read_excel(r'Data/Excels/KITS_RFQ_template.xlsx')
             KITS_RFQ= st.download_button(label='📥 Download KITS RFQ template',
                                 data=to_excel(KITS_RFQ_Template),
                                 file_name= 'KITS_RFQ_Template.xlsx')
@@ -460,7 +460,7 @@ if LOGGED_IN == True:
 
         if page == "KIT images":
                     
-            list_images= os.listdir('Data\Images')
+            list_images= os.listdir('Data/Images')
             img_dict={}
             for name in list_images:
                 k= name[:-4]
@@ -468,7 +468,7 @@ if LOGGED_IN == True:
                 img_dict[k]=v
 
             k= st.selectbox("Select an image",options= img_dict.keys())
-            st.image(r"Data\Images\\" + img_dict[k])
+            st.image(r"Data/Images/" + img_dict[k])
 
     if menu == "RAW DATA":
         Tables_dict= {"FMSI": FMSI, 
