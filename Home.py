@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-from io import BytesIO
 from streamlit_option_menu import option_menu
 from streamlit_login_auth_ui.widgets import __login__
 from Common import to_excel
@@ -347,7 +345,7 @@ if LOGGED_IN == True:
                     FMSI_matches= RFQ['D Plate Number'].str.extractall(r'(D\d+)')
                     FMSI_matches.rename({0: 'FMSI'}, axis= 1, inplace= True)
                     FMSI_matches.index.rename(['line', 'match'], inplace= True)
-                    FMSI_matches['Short FMSI']= FMSI_matches['FMSI'].apply(lambda s: re.sub(r'^D0*', 'D', s) )
+                    FMSI_matches['FMSI (short)']= FMSI_matches['FMSI'].apply(lambda s: re.sub(r'^D0*', 'D', s) )
                     st.markdown("## FMSI matches")
                     st.dataframe(FMSI_matches)
 
@@ -357,31 +355,155 @@ if LOGGED_IN == True:
                     SubResults= []
                     for line in FMSI_matches.index.get_level_values('line'):
                         line_results=[]
-                        for match in FMSI_matches.loc[line, 'FMSI']:
+                        for match in FMSI_matches.loc[line, 'FMSI (short)']:
                             
-                            temp_df= Flat_kits[(Flat_kits['FMSI']==match)]
-                            temp_df= Flat_kits[Flat_kits['FMSI']==match]
+                            temp_df= Flat_kits[(Flat_kits['FMSI (short)']==match)]
+                            temp_df= Flat_kits[Flat_kits['FMSI (short)']==match]
                             line_results.append(set(temp_df["KIT PN"].values))
                         result= line_results[0].intersection(*line_results)
                         Result_df= Flat_kits.loc[(Flat_kits['KIT PN'].isin(result)) 
-                                                    & (Flat_kits['FMSI'].isin(FMSI_matches.loc[line, 'FMSI']))]
+                                                    & (Flat_kits['FMSI (short)'].isin(FMSI_matches.loc[line, 'FMSI (short)']))]
                         Result_df['Line']= line
-                        Result_df.set_index(['Line', 'KIT PN', 'FMSI'], inplace= True)
+                        Result_df.set_index(['Line', 'KIT PN', 'FMSI (short)'], inplace= True)
                         SubResults.append(Result_df)
                         
                     Output= pd.concat(SubResults)
-                    Output= Output.reset_index().drop_duplicates().set_index(['Line', 'KIT PN', 'FMSI']).reset_index()
+                    Output= Output.reset_index().drop_duplicates().set_index(['Line', 'KIT PN', 'FMSI (short)']).reset_index()
 
+                    short_RFQ= RFQ.reset_index().rename(columns={"index":"Line"})[['Line', 'D Plate Number']].set_index("Line")
+                    Output= Output.set_index('Line').join(short_RFQ).reset_index()
+
+                    
+                    Output['Cost']="$"
+                    Output= Output[[
+                        "Line",
+                        "D Plate Number",
+                        "FMSI (short)",
+                        "FMSI",
+                        "KIT PN",
+                        "Cost",
+                        "COO",
+                        "FMSI 2",
+                        "US CA UIO",
+                        "US CA MX UIO",
+                        "US 1 Year Grow Rate",
+                        "Avg Age",
+                        "Comment",
+                        "Application(s)",
+                        "COMMENT_x",
+                        "CREATION DATE",
+                        "LAST UPDATE",
+                        "COMMENT_y",
+                        "Comp. Part No",
+                        "XLD Component - Qty",
+                        "XLD Material Type",
+                        "JMc Updated Xref - IBI",
+                        "JMc Xref 2",
+                        "Kit Contents - Qty and Description",
+                        "Y/N",
+                        "Verification",
+                    ]]
                     st.dataframe(Output)
                     df_xlsx = to_excel(Output.reset_index())
                     st.download_button(label='📥 Download full match',
                                                     data=df_xlsx ,
                                                     file_name= 'RFQ_output.xlsx')
-                    #RFQ Partial match
+                    #Partial match
                     st.markdown('## Partial match:')
-                    st.markdown('in progress..')
+                    SubResults= []
+                    for line in FMSI_matches.index.get_level_values('line'):
+                        line_results=[]
+                        for match in FMSI_matches.loc[line, 'FMSI (short)']:
+                            
+                            temp_df= Flat_kits[(Flat_kits['FMSI (short)']==match)]
+                            temp_df= Flat_kits[Flat_kits['FMSI (short)']==match]
+                            line_results.append(set(temp_df["KIT PN"].values))
+                        result1= line_results[0].intersection(*line_results)
+                        result2= line_results[0].union(*line_results)
+                        result= result2.difference(result1)
+                        Result_df= Flat_kits.loc[(Flat_kits['KIT PN'].isin(result)) 
+                                                    & (Flat_kits['FMSI (short)'].isin(FMSI_matches.loc[line, 'FMSI (short)']))]
+                        Result_df['Line']= line
+                        Result_df.set_index(['Line', 'KIT PN', 'FMSI (short)'], inplace= True)
+                        SubResults.append(Result_df)
+                        
+                        
+                    Output_inc= pd.concat(SubResults)
+                    Output_inc= Output_inc.reset_index().drop_duplicates().set_index(['Line', 'KIT PN', 'FMSI (short)']).reset_index()
+
+
+                    #computing matching count (format: 3/7)
+                    count_matches=Output_inc.reset_index()
+                    count_matches=count_matches.groupby(['Line', 'KIT PN']).count()['FMSI (short)'].reset_index().set_index("Line")
+                    count_per_line= FMSI_matches.reset_index().groupby('line').count()['match']
+
+                    partial_match= count_matches.join(count_per_line, how='left')
+                    partial_match['match count']= pd.DataFrame(partial_match['FMSI (short)'].apply(str)+"/"+partial_match['match'].apply(str))
+                    partial_match=partial_match.reset_index().rename(columns={"index": "Line"})[['Line', 'KIT PN', 'match count']]
+                    partial_match=partial_match.set_index(['Line', 'KIT PN'])
+
+                    Output_inc= Output_inc.reset_index().set_index(['Line', 'KIT PN']).join(partial_match).reset_index()
+
+                    short_RFQ= RFQ.reset_index().rename(columns={"index":"Line"})[['Line', 'D Plate Number']].set_index("Line")
+                    Output_inc= Output_inc.set_index('Line').join(short_RFQ).reset_index()
+
+                    
+                    Output_inc['Cost']="$"
+                    
+                    Output_inc= Output_inc[[
+                        "Line",
+                        "D Plate Number",
+                        "FMSI (short)",
+                        "FMSI",
+                        "KIT PN",
+                        "Cost",
+                        "COO",
+                        "match count",
+                        "FMSI 2",
+                        "US CA UIO",
+                        "US CA MX UIO",
+                        "US 1 Year Grow Rate",
+                        "Avg Age",
+                        "Comment",
+                        "Application(s)",
+                        "COMMENT_x",
+                        "CREATION DATE",
+                        "LAST UPDATE",
+                        "COMMENT_y",
+                        "Comp. Part No",
+                        "XLD Component - Qty",
+                        "XLD Material Type",
+                        "JMc Updated Xref - IBI",
+                        "JMc Xref 2",
+                        "Kit Contents - Qty and Description",
+                        "Y/N",
+                        "Verification",
+                    ]]
+                    st.dataframe(Output_inc)
+                    
+
+                    df_xlsx2 = to_excel(Output_inc.reset_index())
+                    st.download_button(label='📥 Download partial match',
+                                                    data=df_xlsx2 ,
+                                                    file_name= 'RFQ_output_partial.xlsx')
+
+                    
+                    #No match
                     st.markdown('## No match:')
-                    st.markdown('in progress..')
+                    temp_Output= pd.concat([Output, Output_inc]).reset_index().set_index(['Line', 'FMSI (short)'])
+                    temp_match= FMSI_matches.reset_index().set_index(['line', 'FMSI (short)'])
+                    Output_index= temp_Output.index
+                    Match_index= temp_match.index
+
+                    key_diff = set(Match_index).difference(Output_index)
+                    where_diff = temp_match.index.isin(key_diff)
+                    Not_found= temp_match[where_diff].reset_index()
+
+                    st.dataframe(Not_found)
+                    df_xlsx3 = to_excel(Not_found.reset_index())
+                    st.download_button(label='📥 Download no match',
+                                                    data=df_xlsx2 ,
+                                                    file_name= 'RFQ_output_no_match.xlsx')
     
       
         
