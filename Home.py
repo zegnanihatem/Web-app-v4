@@ -37,7 +37,7 @@ if LOGGED_IN == True:
     st.write('<style>div.block-container{padding-top:0rem;}</style>', unsafe_allow_html=True)
     
     DB_path= "Data/Excels/Database.xlsx"
-    @st.cache
+    @st.cache(allow_output_mutation=True)
     def load_DB(DB_path):
         Sheets= pd.read_excel(DB_path, sheet_name=["FMSI", "Kits", "Shim_crossing", "Kit_crossing", "SHIMS"])
         FMSI= Sheets['FMSI']
@@ -72,7 +72,7 @@ if LOGGED_IN == True:
         st.write("# SHIMS Catalogue")
         page = st_row_buttons(
         # The different pages
-        ('Request For Quotation', 'FMSI Lookup', 'SHIM Lookup'),
+        ('Request For Quotation', 'FMSI Lookup', 'SHIM Lookup', 'SHIM crossings'),
         # Enable navbar
         nav=True,
         # You can pass a formatting function. Here we capitalize the options
@@ -308,12 +308,26 @@ if LOGGED_IN == True:
             st.download_button(label='📥 Download Lookup results',
                                             data=df_xlsx ,
                                             file_name= 'SHIM_Lookup_results.xlsx')
+        if page == 'SHIM crossings':
+            Flat_SHIMS, Flat_kits, FMSI, SHIMS, Kits, Shim_crossing, Kit_crossing= load_DB(DB_path)
+            Shim_crossing= Shim_crossing[['FMSI', 'SHIM PN']]
+            Shim_crossing.sort_values(by='SHIM PN', inplace=True)
+            result= Shim_crossing.groupby('SHIM PN')['FMSI'].apply(lambda x: ' '.join(x)).reset_index()            
+            
+            SHIMS= st.text_input(label= 'SHIMS')
+            SHIMS= SHIMS.split(', ')
+            result= result[result['SHIM PN'].isin(SHIMS)]
 
+            st.dataframe(result)
+            df_xlsx = to_excel(result.reset_index())
+            st.download_button(label='📥 Download Lookup results',
+                                            data=df_xlsx ,
+                                            file_name= 'SHIM_crossing_results.xlsx')
     if menu == "KITS":
         st.write("# KITS Catalogue")
         page = st_row_buttons(
         # The different pages
-        ('Request For Quotation', 'FMSI Lookup', 'KIT Lookup', "KIT images"),
+        ('Request For Quotation', 'FMSI Lookup', 'KIT Lookup','KIT crossings', "KIT images"),
         # Enable navbar
         nav=True,
         # You can pass a formatting function. Here we capitalize the options
@@ -504,7 +518,7 @@ if LOGGED_IN == True:
                     st.download_button(label='📥 Download no match',
                                                     data=df_xlsx2 ,
                                                     file_name= 'RFQ_output_no_match.xlsx')
-    
+                    
       
         
         if page == "FMSI Lookup":
@@ -544,7 +558,7 @@ if LOGGED_IN == True:
                                             data=df_xlsx ,
                                             file_name= 'FMSI_Lookup_results.xlsx')
         if page == "KIT Lookup":
-            KITs= st.text_input(label= 'KIT')
+            KITs= st.text_input(label= 'KITs')
             KITs= KITs.split(', ')
             result= Flat_kits[Flat_kits['KIT PN'].isin(KITs)]
             result= result.drop_duplicates().sort_values(["KIT PN", 'FMSI']).reset_index()
@@ -579,6 +593,21 @@ if LOGGED_IN == True:
             st.download_button(label='📥 Download Lookup results',
                                             data=df_xlsx ,
                                             file_name= 'KIT_Lookup_results.xlsx')
+        if page == 'KIT crossings':
+            Flat_SHIMS, Flat_kits, FMSI, SHIMS, Kits, Shim_crossing, Kit_crossing= load_DB(DB_path)
+            Kit_crossing= Kit_crossing[['FMSI', 'KIT PN']]
+            Kit_crossing.sort_values(by='KIT PN', inplace=True)
+            result= Kit_crossing.groupby('KIT PN')['FMSI'].apply(lambda x: ' '.join(x)).reset_index()            
+            
+            KITs= st.text_input(label= 'KIT')
+            KITs= KITs.split(', ')
+            result= result[result['KIT PN'].isin(KITs)]
+
+            st.dataframe(result)
+            df_xlsx = to_excel(result.reset_index())
+            st.download_button(label='📥 Download Lookup results',
+                                            data=df_xlsx ,
+                                            file_name= 'KIT_crossing_results.xlsx')
 
         if page == "KIT images":
                     
@@ -593,17 +622,91 @@ if LOGGED_IN == True:
             st.image(r"Data/Images/" + img_dict[k])
 
     if menu == "RAW DATA":
-        Tables_dict= {"FMSI": FMSI, 
-                      "SHIMS": SHIMS, 
-                      "Kits": Kits, 
-                      "Shim Crossing": Shim_crossing, 
-                      "KIT Crossing": Kit_crossing}
-        Table_name= st.radio("Pick a table", options= Tables_dict.keys(), horizontal=True)
-        Table= Tables_dict[Table_name]
-        st.dataframe(Table)
+        page = st_row_buttons(
+        # The different pages
+        ('Full DATA', 'Filter on DATA'),
+        # Enable navbar
+        nav=True,
+        # You can pass a formatting function. Here we capitalize the options
+        #format_func=lambda name: name.capitalize(),
+        )
+        if page == 'Filter on DATA':
 
-        df_xlsx = to_excel(Table.reset_index())
-        st.download_button(label='''📥 Download "'''+Table_name+'''" table''',
-                                        data=df_xlsx ,
-                                        file_name= Table_name+'.xlsx')
+            catalogue= st.radio("Select Catalogue: ", options= ['Shims & Kits', 'Hardware'], horizontal=True)
+            if catalogue== "Shims & Kits":
+                Tables_dict= {"FMSI": FMSI, 
+                            "SHIMS": SHIMS, 
+                            "Kits": Kits, 
+                            "Shim Crossing": Shim_crossing, 
+                            "KIT Crossing": Kit_crossing}
+                Table_name= st.selectbox("Pick a table", options= Tables_dict.keys())
+                Table= Tables_dict[Table_name]
+
+                count_filters = st.radio('Count of filters: ', [1, 2], horizontal=True)
+                if count_filters == 1:
+                    col1, col2, col3, col4 = st.columns(4)
+                    Filter1= col1.selectbox('Filter 1', Table.columns)
+                    Value1= col2.selectbox('Value 1', set(Table[Filter1]))
+                    Table= Table[Table[Filter1]== Value1]
+
+                else:
+                    col1, col2, col3, col4 = st.columns(4)
+                    Filter1= col1.selectbox('Filter 1', Table.columns)
+                    Value1= col2.selectbox('Value 1', set(Table[Filter1]))
+                    
+                    list2= Table.columns.to_list()
+                    list2.remove(Filter1)
+                    Table= Table[Table[Filter1]== Value1]
+                    
+                    Filter2= col3.selectbox('Filter 2', list2)
+                    Value2= col4.selectbox("Value 2", set(Table[Filter2]))
+                    
+                    Table= Table[Table[Filter2]== Value2]
+
+
+
+                st.dataframe(Table)
+
+                df_xlsx = to_excel(Table.reset_index())
+                st.download_button(label='''📥 Download "'''+Table_name+'''" filtered table''',
+                                                data=df_xlsx ,
+                                                file_name= Table_name+'.xlsx')
+            if catalogue== "Hardware":
+                Tables_dict= pd.read_excel("Data\Excels\Database_HDW.xlsx", sheet_name=None)
+                Table_name= st.selectbox("Pick a table", options= sorted(list(Tables_dict.keys())))
+                Table= Tables_dict[Table_name]
+                
+                
+                st.dataframe(Table)
+                df_xlsx = to_excel(Table.reset_index())
+                st.download_button(label='''📥 Download "'''+Table_name+'''" table''',
+                                                data=df_xlsx ,
+                                                file_name= Table_name+'.xlsx')
+        if page == 'Full DATA':
+
+            catalogue= st.radio("Select Catalogue: ", options= ['Shims & Kits', 'Hardware'], horizontal=True)
+            if catalogue== "Shims & Kits":
+                Tables_dict= {"FMSI": FMSI, 
+                            "SHIMS": SHIMS, 
+                            "Kits": Kits, 
+                            "Shim Crossing": Shim_crossing, 
+                            "KIT Crossing": Kit_crossing}
+                Table_name= st.selectbox("Pick a table", options= Tables_dict.keys())
+                Table= Tables_dict[Table_name]
+
+                st.dataframe(Table)
+
+                df_xlsx = to_excel(Table.reset_index())
+                st.download_button(label='''📥 Download "'''+Table_name+'''" table''',
+                                                data=df_xlsx ,
+                                                file_name= Table_name+'.xlsx')
+            if catalogue== "Hardware":
+                Tables_dict= pd.read_excel("Data\Excels\Database_HDW.xlsx", sheet_name=None)
+                Table_name= st.selectbox("Pick a table", options= sorted(list(Tables_dict.keys())))
+                Table= Tables_dict[Table_name]
+                st.dataframe(Table)
+                df_xlsx = to_excel(Table.reset_index())
+                st.download_button(label='''📥 Download "'''+Table_name+'''" table''',
+                                                data=df_xlsx ,
+                                                file_name= Table_name+'.xlsx')
 
