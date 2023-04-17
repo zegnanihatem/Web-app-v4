@@ -4,11 +4,13 @@ from streamlit_option_menu import option_menu
 from streamlit_login_auth_ui.widgets import __login__
 from Common import to_excel
 from st_row_buttons import st_row_buttons
+import numpy as np
+import json
 import re
 import os
 
 
-
+Users= pd.read_csv('Users.csv', sep= ",")
 st.set_page_config(
    page_title="Xinlida Catalogue",
    page_icon="🧊",
@@ -34,10 +36,12 @@ __login__obj = __login__(auth_token = "courier_auth_token",
 LOGGED_IN = __login__obj.build_login_ui()
 
 if LOGGED_IN == True:
+    
+    user_name= __login__obj.cookies['__streamlit_login_signup_ui_username__']
     st.write('<style>div.block-container{padding-top:0rem;}</style>', unsafe_allow_html=True)
     
     DB_path= "Data/Excels/Database.xlsx"
-    @st.cache(allow_output_mutation=True)
+    @st.cache_data
     def load_DB(DB_path):
         Sheets= pd.read_excel(DB_path, sheet_name=["FMSI", "Kits", "Shim_crossing", "Kit_crossing", "SHIMS"])
         FMSI= Sheets['FMSI']
@@ -57,11 +61,21 @@ if LOGGED_IN == True:
     
     
     with st.sidebar:
+        Admin= str(Users.set_index('Username').loc[user_name, 'Admin'])
+        SU= str(Users.set_index('Username').loc[user_name, 'SU'])
+        display_name= user_name
+        if Admin == "True":
+            diplay_name= user_name + ' (Admin)'
+        elif SU == "True":
+            diplay_name= user_name + ' (SU)'
+
+        st.write(display_name)
         st.image(r"Data/logo.jpeg")
         menu = option_menu(menu_title="Navigation",options=
                            ["SHIMS",
                             "KITS",
-                            "RAW DATA"
+                            "RAW DATA",
+                            "User Management"
                             ],
                             default_index=1,
                             #icons=["gear",
@@ -641,48 +655,90 @@ if LOGGED_IN == True:
                             "KIT Crossing": Kit_crossing}
                 Table_name= st.selectbox("Pick a table", options= Tables_dict.keys())
                 Table= Tables_dict[Table_name]
-
-                count_filters = st.radio('Count of filters: ', [1, 2], horizontal=True)
-                if count_filters == 1:
-                    col1, col2, col3, col4 = st.columns(4)
-                    Filter1= col1.selectbox('Filter 1', Table.columns)
-                    Value1= col2.selectbox('Value 1', set(Table[Filter1]))
-                    Table= Table[Table[Filter1]== Value1]
-
-                else:
-                    col1, col2, col3, col4 = st.columns(4)
-                    Filter1= col1.selectbox('Filter 1', Table.columns)
-                    Value1= col2.selectbox('Value 1', set(Table[Filter1]))
-                    
-                    list2= Table.columns.to_list()
-                    list2.remove(Filter1)
-                    Table= Table[Table[Filter1]== Value1]
-                    
-                    Filter2= col3.selectbox('Filter 2', list2)
-                    Value2= col4.selectbox("Value 2", set(Table[Filter2]))
-                    
-                    Table= Table[Table[Filter2]== Value2]
-
-
-
-                st.dataframe(Table)
-
-                df_xlsx = to_excel(Table.reset_index())
-                st.download_button(label='''📥 Download "'''+Table_name+'''" filtered table''',
-                                                data=df_xlsx ,
-                                                file_name= Table_name+'.xlsx')
+   
             if catalogue== "Hardware":
                 Tables_dict= pd.read_excel("Data\Excels\Database_HDW.xlsx", sheet_name=None)
                 Table_name= st.selectbox("Pick a table", options= sorted(list(Tables_dict.keys())))
                 Table= Tables_dict[Table_name]
+
+            count_filters = st.radio('Count of filters: ', [1, 2], horizontal=True)
+            if count_filters == 1:
+                col1, col2, col3, col4 = st.columns(4)
+                Filter1= col1.selectbox('Filter 1', Table.columns)
+                Value1= col2.selectbox('Value 1', set(Table[Filter1]))
+                Table= Table[Table[Filter1]== Value1]
+
+            else:
+                col1, col2, col3, col4 = st.columns(4)
+                Filter1= col1.selectbox('Filter 1', Table.columns)
+                Value1= col2.selectbox('Value 1', set(Table[Filter1]))
+                
+                list2= Table.columns.to_list()
+                list2.remove(Filter1)
+                Table= Table[Table[Filter1]== Value1]
+                
+                Filter2= col3.selectbox('Filter 2', list2)
+                Value2= col4.selectbox("Value 2", set(Table[Filter2]))
+                
+                Table= Table[Table[Filter2]== Value2]
+            
+            st.dataframe(Table, use_container_width=True)
+            df_xlsx = to_excel(Table.reset_index())
+            st.download_button(label='''📥 Download "'''+Table_name+'''" lines''',
+                                            data=df_xlsx ,
+                                            file_name= Table_name+'.xlsx')
+            if SU == "True":
+                st.write('## Update: ')
+                line_index= st.selectbox('Index', Table.index)
+                update_selection= st.radio('Type: ', ["Update current line", "Insert new line", "Delete a line"], horizontal=True)
+                col1, col2= st.columns(2)
+                col_length= len(Table.columns)
+                col_half_length= round(col_length/2)
+
+
+                update_line= dict()
+                if update_selection=="Update current line":
+                    with col1:
+                        for i in range(col_length-col_half_length):
+                            col_name= Table.columns[i]
+                            update_line[col_name]= st.text_input(col_name, Table.loc[line_index, col_name], key= col_name)
+                    with col2:
+                        for i in range(col_half_length+1, col_length):
+                            col_name= Table.columns[i]
+                            update_line[col_name]= st.text_input(col_name, Table.loc[line_index, col_name], key= col_name)
+                    update_button= st.button('Update')
+                    if update_button:
+                        Table.loc[line_index]= update_line
+        
+                if update_selection=="Insert new line":
+                    with col1:
+                        for i in range(col_length-col_half_length):
+                            col_name= Table.columns[i]
+                            update_line[col_name]= st.text_input(col_name, key= col_name)
+                    with col2:
+                        for i in range(col_half_length+1, col_length):
+                            col_name= Table.columns[i]
+                            update_line[col_name]= st.text_input(col_name, key= col_name)
+                    update_button= st.button('Update')
+                    if update_button:
+                        Table.loc[len(Table)+1]= update_line
+                if update_selection=="Delete a line":
+                    st.write('Do you confirm deleting this line indexed:', line_index,' ?')
+                    with col1:
+                        for i in range(col_length-col_half_length):
+                            col_name= Table.columns[i]
+                            st.markdown("##### "+col_name+': '+Table.loc[line_index, col_name])
+                    with col2:
+                        for i in range(col_half_length+1, col_length):
+                            col_name= Table.columns[i]
+                            st.markdown("##### "+col_name+': '+Table.loc[line_index, col_name])
+                    delete_button= st.button('Confirm')
                 
                 
-                st.dataframe(Table)
-                df_xlsx = to_excel(Table.reset_index())
-                st.download_button(label='''📥 Download "'''+Table_name+'''" table''',
-                                                data=df_xlsx ,
-                                                file_name= Table_name+'.xlsx')
+
         if page == 'Full DATA':
+            user_name= __login__obj.cookies['__streamlit_login_signup_ui_username__']
+            st.write(user_name)
 
             catalogue= st.radio("Select Catalogue: ", options= ['Shims & Kits', 'Hardware'], horizontal=True)
             if catalogue== "Shims & Kits":
@@ -691,22 +747,61 @@ if LOGGED_IN == True:
                             "Kits": Kits, 
                             "Shim Crossing": Shim_crossing, 
                             "KIT Crossing": Kit_crossing}
-                Table_name= st.selectbox("Pick a table", options= Tables_dict.keys())
-                Table= Tables_dict[Table_name]
-
-                st.dataframe(Table)
-
-                df_xlsx = to_excel(Table.reset_index())
-                st.download_button(label='''📥 Download "'''+Table_name+'''" table''',
-                                                data=df_xlsx ,
-                                                file_name= Table_name+'.xlsx')
             if catalogue== "Hardware":
                 Tables_dict= pd.read_excel("Data\Excels\Database_HDW.xlsx", sheet_name=None)
-                Table_name= st.selectbox("Pick a table", options= sorted(list(Tables_dict.keys())))
-                Table= Tables_dict[Table_name]
-                st.dataframe(Table)
-                df_xlsx = to_excel(Table.reset_index())
-                st.download_button(label='''📥 Download "'''+Table_name+'''" table''',
-                                                data=df_xlsx ,
-                                                file_name= Table_name+'.xlsx')
+            
+            Table_name= st.selectbox("Pick a table", options= sorted(list(Tables_dict.keys())))
+            Table= Tables_dict[Table_name]
+            st.dataframe(Table)
+            df_xlsx = to_excel(Table.reset_index())
+            st.download_button(label='''📥 Download "'''+Table_name+'''" table''',
+                                            data=df_xlsx ,
+                                            file_name= Table_name+'.xlsx')
 
+            if SU == "True": 
+                st.write('# Bulk update')
+
+                file = st.file_uploader('''📥 Upload new  "'''+Table_name+'''" table''')
+
+                if file:
+                    Table_new=pd.read_excel(file).drop(columns= "index").fillna(np.nan)
+                    try:
+                        valid_headers= (Table_new.columns==Table.columns).min()
+                    except:
+                        valid_headers= 0
+                    if not valid_headers :
+                        st.write('Invalid file format: ')
+                        for column in Table.columns:
+                            if column not in Table_new.columns:
+                                st.write("'", column ,"' column is missing")
+                        for column in Table_new.columns:
+                            if column not in Table.columns:
+                                st.write("'", column, "' column is invalid")
+                    elif valid_headers:
+                        st.write('## Uploaded file: ')
+                        st.dataframe(Table_new)
+                        New_lines= pd.concat([Table,Table_new], keys= ['Old', 'New']).drop_duplicates(keep=False)
+                        st.write('## Updates: ')
+                        st.dataframe(New_lines)
+                        st.write('## Shapes: ')
+                        st.write('Old Table Shape: ', Table.shape[0], ' lines', Table.shape[1], ' columns')
+                        st.write('New Table Shape: ', Table_new.shape[0], ' lines', Table_new.shape[1], ' columns')
+                        confirm= st.button('Confirm update')
+                        if confirm:
+                            st.write('New file uploaded successfully!')
+    if menu == "User Management" and Admin == "True":
+        with open('_secret_auth_.json', 'r') as f:
+            users = json.load(f)
+        users_df= pd.DataFrame(users).drop(columns= ['password'])
+
+        st.write('## Registered users:')
+        
+        Users= pd.read_csv('Users.csv', sep= ",")
+        Users= Users.dropna(subset= ['Username'])
+        Users_dynamic= st.experimental_data_editor(Users, num_rows= "dynamic")
+        Update_button= st.button('Update')
+        if Update_button:
+            Users_dynamic.to_csv('Users.csv', index= False)
+
+
+        
